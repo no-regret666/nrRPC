@@ -35,7 +35,7 @@ func TestMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := readMessage(&buf)
+	resp, err := Read(&buf)
 	if err != nil {
 		t.Fatal(err)
 	}
