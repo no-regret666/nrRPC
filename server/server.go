@@ -1,10 +1,15 @@
 package server
 
 import (
+	"bufio"
+	"context"
 	"crypto/tls"
 	"errors"
+	"io"
 	"net"
+	"net/http"
 	"nrRPC/log"
+	"nrRPC/protocol"
 	"runtime"
 	"sync"
 	"time"
@@ -144,4 +149,72 @@ func (s *Server) serveConn(conn net.Conn) {
 			return
 		}
 	}
+
+	ctx := context.WithValue(context.Background(), RemoteConnContextKey, conn)
+	r := bufio.NewReaderSize(conn, ReaderBuffsize)
+	w := bufio.NewWriterSize(conn, WriterBuffsize)
+
+	for {
+		if s.IdleTimeout != 0 {
+			conn.SetReadDeadline(time.Now().Add(s.IdleTimeout))
+		}
+
+		t0 := time.Now()
+		if s.ReadTimeout != 0 {
+			conn.SetReadDeadline(t0.Add(s.ReadTimeout))
+		}
+
+		if s.WriteTimeout != 0 {
+			conn.SetWriteDeadline(t0.Add(s.WriteTimeout))
+		}
+
+		req, err := s.readRequest(ctx, r)
+		if err != nil {
+			log.Errorf("rpc: failed to read request: %v", err)
+			return
+		}
+
+		resp, err := s.handleRequest(ctx, req)
+		if err != nil {
+			log.Error("rpc:failed to handle request: %v", err)
+		}
+
+		resp.WriteTo(w)
+	}
+}
+
+func (s *Server) readRequest(ctx context.Context, r io.Reader) (req *protocol.Message, err error) {
+	req, err = protocol.Read(r)
+	return req, err
+}
+
+func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (resp *protocol.Message, err error) {
+
+}
+
+// Can connect to RPC service using HTTP CONNECT to rpcPath
+var connected = "200 Connected to Go RPC"
+
+// ServeHTTP implements an http.Handler that answers RPC requests
+func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.Method != "CONNECT" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		io.WriteString(w, "405 must CONNECT\n")
+		return
+	}
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		log.Info("rpc hijacking ", req.RemoteAddr, ":", err.Error())
+		return
+	}
+	io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
+	s.serveConn(conn)
+}
+
+// HandleHTTP registers an HTTP handler for RPC messages on rpcPath,
+// and a debugging handler on debugPath.
+// It is still necessary to invoke http.Serve(),typically in a go statement.
+func (s *Server) HandleHTTP(rpcPath, debugPath string) {
+	http.Handle(rpcPath, s)
 }
