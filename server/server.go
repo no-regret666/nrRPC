@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"debug/macho"
 	"errors"
 	"io"
 	"net"
 	"net/http"
 	"nrRPC/log"
 	"nrRPC/protocol"
+	"reflect"
 	"runtime"
 	"sync"
 	"time"
@@ -27,6 +29,12 @@ const (
 
 	// WriterBuffsize if used for bufio writer
 	WriterBuffsize = 16 * 1024
+
+	// ServerPath is service name
+	ServicePath = "_rpcx_path_"
+
+	//ServiceMethod is name of the service
+	ServiceMethod = "_rpcx_method_"
 )
 
 // contextKey is a value for use with context.WithValue.It's used as
@@ -48,13 +56,21 @@ var (
 
 // Server is rpc server that use TCP or UDP.
 type Server struct {
-	ln           net.Listener
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	IdleTimeout  time.Duration
-	mu           sync.Mutex
-	activeConn   map[net.Conn]struct{}
-	doneChan     chan struct{}
+	// 网络连接相关
+	ln           net.Listener  // 监听套接字
+	ReadTimeout  time.Duration // 读取请求超时时间
+	WriteTimeout time.Duration // 写入响应超时时间
+	IdleTimeout  time.Duration // 空闲连接超时时间
+
+	// 服务注册相关（并发安全）
+	ServiceMapMu sync.RWMutex
+	serviceMap   map[string]*service
+	funcMap      map[string]*methodType
+
+	// 连接管理相关（并发安全）
+	mu         sync.RWMutex          //保护 activeConn 的读写锁
+	activeConn map[net.Conn]struct{} // 活跃连接集合
+	doneChan   chan struct{}         // 服务器关闭信号通道
 }
 
 func (s *Server) getDoneChan() <-chan struct{} {
@@ -174,12 +190,13 @@ func (s *Server) serveConn(conn net.Conn) {
 			return
 		}
 
-		resp, err := s.handleRequest(ctx, req)
-		if err != nil {
-			log.Error("rpc:failed to handle request: %v", err)
-		}
-
-		resp.WriteTo(w)
+		go func() {
+			resp, err := s.handleRequest(ctx, req)
+			if err != nil {
+				log.Error("rpc:failed to handle request: %v", err)
+			}
+			resp.WriteTo(w)
+		}()
 	}
 }
 
@@ -189,7 +206,52 @@ func (s *Server) readRequest(ctx context.Context, r io.Reader) (req *protocol.Me
 }
 
 func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (resp *protocol.Message, err error) {
+	resp = protocol.NewMessage()
 
+	serviceName := req.Metadata[ServicePath]
+	methodName := req.Metadata[ServiceMethod]
+
+	s.ServiceMapMu.RLock()
+	service := s.serviceMap[serviceName]
+	s.ServiceMapMu.RUnlock()
+	if service == nil {
+		err = errors.New("rpc: can't find service " + serviceName)
+		return
+	}
+	mtype := service.method[methodName]
+	if mtype == nil {
+		err = errors.New("rpc: can't find method " + methodName)
+		return
+	}
+
+	var argv, replyv reflect.Value
+
+	argsIsValue := false // if true,need to indirect before calling
+	if mtype.ArgType.Kind() == reflect.Ptr {
+		argv = reflect.New(mtype.ArgType.Elem())
+	} else {
+		argv = reflect.New(mtype.ArgType)
+		argsIsValue = true
+	}
+
+	// TODO decode from payload
+
+	if argsIsValue {
+		argv = argv.Elem()
+	}
+
+	replyv = reflect.New(mtype.ReplyType.Elem())
+
+	err = service.call(ctx, mtype, argv, replyv)
+	if err != nil {
+		// TODO set error response
+		return resp, err
+	}
+	// TODO clone req for req,
+	// encode replyv to res.Payload or
+	// return res
+
+	return resp, nil
 }
 
 // Can connect to RPC service using HTTP CONNECT to rpcPath
