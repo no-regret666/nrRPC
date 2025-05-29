@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
-	"debug/macho"
+	_ "debug/macho"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -22,7 +23,7 @@ var ErrServerClosed = errors.New("http: Server closed")
 
 const (
 	// DefaultRPCPath is used by ServeHTTP
-	DefaultRPCPath = "/_rpcx_"
+	DefaultRPCPath = "/_rpc_"
 
 	// ReaderBuffsize is used for bufio reader
 	ReaderBuffsize = 16 * 1024
@@ -30,11 +31,21 @@ const (
 	// WriterBuffsize if used for bufio writer
 	WriterBuffsize = 16 * 1024
 
-	// ServerPath is service name
-	ServicePath = "_rpcx_path_"
+	// ServicePath is service name
+	ServicePath = "_rpc_path_"
 
 	//ServiceMethod is name of the service
-	ServiceMethod = "_rpcx_method_"
+	ServiceMethod = "_rpc_method_"
+
+	// ServiceError contains error info of service invocation
+	ServiceError = "_rpc_error_"
+)
+
+var (
+	codecs = map[protocol.SerializeType]codec.Codec{
+		protocol.SerializeNone: &codec.ByteCodec{},
+		protocol.JSON:          &codec.JSONCodec{},
+	}
 )
 
 // contextKey is a value for use with context.WithValue.It's used as
@@ -118,7 +129,7 @@ func (s *Server) Serve(ln net.Listener) error {
 					tempDelay = max
 				}
 
-				log.Errorf("rpcx: Accept error: %v; retrying in %v", err, tempDelay)
+				log.Errorf("rpc: Accept error: %v; retrying in %v", err, tempDelay)
 				time.Sleep(tempDelay)
 				continue
 			}
@@ -206,7 +217,8 @@ func (s *Server) readRequest(ctx context.Context, r io.Reader) (req *protocol.Me
 }
 
 func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (resp *protocol.Message, err error) {
-	resp = protocol.NewMessage()
+	resp = req.Clone()
+	resp.SetMessageType(protocol.Response)
 
 	serviceName := req.Metadata[ServicePath]
 	methodName := req.Metadata[ServiceMethod]
@@ -216,11 +228,15 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (resp
 	s.ServiceMapMu.RUnlock()
 	if service == nil {
 		err = errors.New("rpc: can't find service " + serviceName)
+		resp.SetMessageStatusType(protocol.Error)
+		resp.Metadata[ServiceError] = err.Error()
 		return
 	}
 	mtype := service.method[methodName]
 	if mtype == nil {
 		err = errors.New("rpc: can't find method " + methodName)
+		resp.SetMessageStatusType(protocol.Error)
+		resp.Metadata[ServiceError] = err.Error()
 		return
 	}
 
@@ -234,23 +250,41 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (resp
 		argsIsValue = true
 	}
 
-	// TODO decode from payload
-
 	if argsIsValue {
 		argv = argv.Elem()
+	}
+
+	codec := codecs[req.SerializeType()]
+	if codec == nil {
+		err = fmt.Errorf("can not find codec for %d", req.SerializeType())
+		resp.SetMessageStatusType(protocol.Error)
+		resp.Metadata[ServiceError] = err.Error()
+		return
+	}
+
+	err = codec.Decode(req.Payload, argv.Interface())
+	if err != nil {
+		resp.SetMessageStatusType(protocol.Error)
+		resp.Metadata[ServiceError] = err.Error()
+		return
 	}
 
 	replyv = reflect.New(mtype.ReplyType.Elem())
 
 	err = service.call(ctx, mtype, argv, replyv)
 	if err != nil {
-		// TODO set error response
+		resp.SetMessageStatusType(protocol.Error)
+		resp.Metadata[ServiceError] = err.Error()
 		return resp, err
 	}
-	// TODO clone req for req,
-	// encode replyv to res.Payload or
-	// return res
 
+	data, err := codec.Encode(replyv.Interface())
+	if err != nil {
+		resp.SetMessageStatusType(protocol.Error)
+		resp.Metadata[ServiceError] = err.Error()
+		return resp, err
+	}
+	resp.Payload = data
 	return resp, nil
 }
 
