@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/fatih/color v1.18.0
+	github.com/kavu/go_reuseport v1.5.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	google.golang.org/protobuf v1.36.6
 )

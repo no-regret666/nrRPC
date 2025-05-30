@@ -36,8 +36,8 @@ func TestHandleRequest(t *testing.T) {
 	req.SetSerializeType(protocol.JSON)
 	req.SetSeq(1234567890)
 
-	req.Metadata[ServicePath] = "Arith"
-	req.Metadata[ServiceMethod] = "Mul"
+	req.Metadata[protocol.ServicePath] = "Arith"
+	req.Metadata[protocol.ServiceMethod] = "Mul"
 
 	argv := &Args{
 		A: 10,
@@ -64,7 +64,7 @@ func TestHandleRequest(t *testing.T) {
 
 	reply := &Reply{}
 
-	codec := codecs[resp.SerializeType()]
+	codec := share.codecs[resp.SerializeType()]
 	if codec == nil {
 		t.Fatalf("can not find codec %c", codec)
 	}

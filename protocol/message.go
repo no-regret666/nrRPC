@@ -21,6 +21,12 @@ var (
 	ErrMetaKVMissing = errors.New("wrong metadata lines. some keys or values are missing")
 )
 
+const (
+	ServicePath   = "_rpc_path_"
+	ServiceMethod = "_rpc_method_"
+	ServiceError  = "_rpc_error_"
+)
+
 type MessageType byte
 
 const (
@@ -50,7 +56,7 @@ const (
 type SerializeType byte
 
 const (
-	Serialize SerializeType = iota
+	SerializeNone SerializeType = iota
 	JSON
 	ProtoBuffer
 	MsgPack
