@@ -217,7 +217,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		go func() {
 			resp, err := s.handleRequest(ctx, req)
 			if err != nil {
-				log.Error("rpc:failed to handle request: %v", err)
+				log.Errorf("rpc:failed to handle request: %v", err)
 			}
 			resp.WriteTo(w)
 			w.Flush()
