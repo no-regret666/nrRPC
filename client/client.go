@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	circuit "github.com/rubyist/circuitbreaker"
 	kcp "github.com/xtaci/kcp-go"
 )
 
@@ -21,6 +22,8 @@ var (
 	ErrShutdown         = errors.New("connection is shutdown")
 	ErrUnsupportedCodec = errors.New("unsupported codec")
 )
+
+var CircuitBreaker = circuit.NewRateBreaker(0.95, 100)
 
 const (
 	ReaderBuffsize = 16 * 1024
@@ -36,6 +39,8 @@ type Client struct {
 	ConnectTimeout time.Duration
 	ReadTimeout    time.Duration
 	WriteTimeout   time.Duration
+
+	UseCircuitBreaker bool
 
 	Conn net.Conn
 	r    *bufio.Reader
@@ -91,7 +96,17 @@ func (client *Client) Go(ctx context.Context, servicePath, serviceMethod string,
 }
 
 // Call : 同步调用
-func (client *Client) Call(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}) error {
+func (client *Client) Call(ctx context.Context, servicedPath, serviceMethod string, args interface{}, reply interface{}) error {
+	if client.UseCircuitBreaker {
+		return CircuitBreaker.Call(func() error {
+			return client.call(ctx, servicedPath, serviceMethod, args, reply)
+		}, 0)
+	}
+
+	return client.call(ctx, servicedPath, serviceMethod, args, reply)
+}
+
+func (client *Client) call(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}) error {
 	seq := new(uint64)
 	ctx = context.WithValue(ctx, seqKey{}, seq)
 	Done := client.Go(ctx, servicePath, serviceMethod, args, reply, make(chan *Call, 1)).Done

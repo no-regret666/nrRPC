@@ -7,7 +7,6 @@ import (
 	_ "debug/macho"
 	"errors"
 	"fmt"
-	"github.com/xtaci/kcp-go"
 	"io"
 	"net"
 	"net/http"
@@ -66,17 +65,18 @@ type Server struct {
 	inShutdown int32
 	onShutdown []func()
 
-	KCPConfig  KCPConfig
-	QUICConfig QUICConfig
+	Options map[string]interface{}
+	//KCPConfig  KCPConfig
+	//QUICConfig QUICConfig
 }
 
-type KCPConfig struct {
-	BlockCrypt kcp.BlockCrypt
-}
-
-type QUICConfig struct {
-	TlsConfig *tls.Config
-}
+//type KCPConfig struct {
+//	BlockCrypt kcp.BlockCrypt
+//}
+//
+//type QUICConfig struct {
+//	TlsConfig *tls.Config
+//}
 
 func (s *Server) Address() net.Addr {
 	if s.ln == nil {

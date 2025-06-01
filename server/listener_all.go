@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/tls"
+	"errors"
 	quicconn "github.com/marten-seemann/quic-conn"
 	"github.com/xtaci/kcp-go"
 	"net"
@@ -19,9 +21,15 @@ func (s *Server) makeListener(network, address string) (ln net.Listener, err err
 
 		ln, err = reuseport.NewReusablePortListener(network, address)
 	case "kcp":
-		ln, err = kcp.ListenWithOptions(address, s.KCPConfig.BlockCrypt, 10, 3)
+		if s.Options == nil || s.Options["BlockCrypt"] == nil {
+			return nil, errors.New("KCP BlockCrypt must be configured in server.Options")
+		}
+		ln, err = kcp.ListenWithOptions(address, s.Options["BlockCrypt"].(kcp.BlockCrypt), 10, 3)
 	case "quic":
-		ln, err = quicconn.Listen("udp", address, s.QUICConfig.TlsConfig)
+		if s.Options == nil || s.Options["QuicCrypt"] == nil {
+			return nil, errors.New("KCP BlockCrypt must be configured in server.Options")
+		}
+		ln, err = quicconn.Listen("udp", address, s.Options["QuicConfig"].(*tls.Config))
 	default: //tcp,http
 		ln, err = net.Listen(network, address)
 	}
