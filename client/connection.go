@@ -10,6 +10,9 @@ import (
 	"nrRPC/log"
 	"nrRPC/share"
 	"time"
+
+	quicconn "github.com/marten-seemann/quic-conn"
+	kcp "github.com/xtaci/kcp-go"
 )
 
 func (c *Client) Connect(network, address string, opts ...interface{}) error {
@@ -19,6 +22,10 @@ func (c *Client) Connect(network, address string, opts ...interface{}) error {
 	switch network {
 	case "http":
 		conn, err = newDirectHTTPConn(c, network, address)
+	case "kcp":
+		conn, err = newDirectKCPConn(c, network, address)
+	case "quic":
+		conn, err = newDirectQuicConn(c, network, address)
 	default:
 		conn, err = newDirectTCPConn(c, network, address)
 	}
@@ -113,4 +120,32 @@ func newDirectHTTPConn(c *Client, network, address string, opts ...interface{}) 
 		Addr: nil,
 		Err:  err,
 	}
+}
+
+func newDirectKCPConn(c *Client, network, address string, opts ...interface{}) (net.Conn, error) {
+	var conn net.Conn
+	var err error
+
+	conn, err = kcp.DialWithOptions(address, c.Block, 10, 3)
+
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+func newDirectQuicConn(c *Client, network, address string) (net.Conn, error) {
+	var conn net.Conn
+	var err error
+
+	tlsConf := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+	conn, err = quicconn.Dial(address, tlsConf)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
 }

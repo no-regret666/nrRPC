@@ -7,6 +7,7 @@ import (
 	_ "debug/macho"
 	"errors"
 	"fmt"
+	"github.com/xtaci/kcp-go"
 	"io"
 	"net"
 	"net/http"
@@ -64,6 +65,17 @@ type Server struct {
 
 	inShutdown int32
 	onShutdown []func()
+
+	KCPConfig  KCPConfig
+	QUICConfig QUICConfig
+}
+
+type KCPConfig struct {
+	BlockCrypt kcp.BlockCrypt
+}
+
+type QUICConfig struct {
+	TlsConfig *tls.Config
 }
 
 func (s *Server) Address() net.Addr {
@@ -85,7 +97,7 @@ func (s *Server) getDoneChan() <-chan struct{} {
 
 func (s *Server) Serve(network, address string) (err error) {
 	var ln net.Listener
-	ln, err = makeListener(network, address)
+	ln, err = s.makeListener(network, address)
 	if err != nil {
 		return
 	}

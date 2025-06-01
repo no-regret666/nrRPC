@@ -1,12 +1,14 @@
 package server
 
 import (
+	quicconn "github.com/marten-seemann/quic-conn"
+	"github.com/xtaci/kcp-go"
 	"net"
 
 	reuseport "github.com/kavu/go_reuseport"
 )
 
-func makeListener(network, address string) (ln net.Listener, err error) {
+func (s *Server) makeListener(network, address string) (ln net.Listener, err error) {
 	switch network {
 	case "reuseport":
 		if ValidIP4(address) {
@@ -16,8 +18,11 @@ func makeListener(network, address string) (ln net.Listener, err error) {
 		}
 
 		ln, err = reuseport.NewReusablePortListener(network, address)
-
-	default:
+	case "kcp":
+		ln, err = kcp.ListenWithOptions(address, s.KCPConfig.BlockCrypt, 10, 3)
+	case "quic":
+		ln, err = quicconn.Listen("udp", address, s.QUICConfig.TlsConfig)
+	default: //tcp,http
 		ln, err = net.Listen(network, address)
 	}
 

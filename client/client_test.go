@@ -26,7 +26,7 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 
 type PBArith int
 
-func (t *PBArith) Mul(ctx context.Context, args *ProtoArgs, reply *ProtoReply) error {
+func (t *PBArith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 	reply.C = args.A * args.B
 	return nil
 }

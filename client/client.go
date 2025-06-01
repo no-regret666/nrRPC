@@ -13,6 +13,8 @@ import (
 	"nrRPC/util"
 	"sync"
 	"time"
+
+	kcp "github.com/xtaci/kcp-go"
 )
 
 var (
@@ -29,6 +31,7 @@ type seqKey struct{}
 
 type Client struct {
 	TLSConfig *tls.Config
+	Block     kcp.BlockCrypt
 
 	ConnectTimeout time.Duration
 	ReadTimeout    time.Duration
