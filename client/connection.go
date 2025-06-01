@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"crypto/tls"
 	"errors"
-	quicconn "github.com/marten-seemann/quic-conn"
-	"github.com/xtaci/kcp-go"
 	"io"
 	"net"
 	"net/http"

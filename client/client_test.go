@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	testutils "nrRPC/_testutils"
 	"nrRPC/protocol"
 	"nrRPC/server"
 	"testing"
@@ -26,15 +27,15 @@ func (t *Arith) Mul(ctx context.Context, args *Args, reply *Reply) error {
 
 type PBArith int
 
-func (t *PBArith) Mul(ctx context.Context, args *Args, reply *Reply) error {
+func (t *PBArith) Mul(ctx context.Context, args *testutils.ProtoArgs, reply *testutils.ProtoReply) error {
 	reply.C = args.A * args.B
 	return nil
 }
 
 func TestClient_IT(t *testing.T) {
 	server := server.Server{}
-	server.RegisterName("Arith", new(Arith))
-	server.RegisterName("PBArith", new(PBArith))
+	server.RegisterName("Arith", new(Arith), "")
+	server.RegisterName("PBArith", new(PBArith), "")
 	go server.Serve("tcp", "127.0.0.1:0")
 	defer server.Close()
 	time.Sleep(500 * time.Millisecond)
@@ -85,11 +86,11 @@ func TestClient_IT(t *testing.T) {
 
 	client.SerializeType = protocol.ProtoBuffer
 
-	pbArgs := &ProtoArgs{
+	pbArgs := &testutils.ProtoArgs{
 		A: 10,
 		B: 20,
 	}
-	pbReply := &ProtoReply{}
+	pbReply := &testutils.ProtoReply{}
 	err = client.Call(context.Background(), "PBArith", "Mul", pbArgs, pbReply)
 	if err != nil {
 		t.Fatalf("failed to call: %v", err)

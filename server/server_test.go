@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"nrRPC/protocol"
+	"nrRPC/share"
 	"testing"
 )
 
@@ -52,7 +53,7 @@ func TestHandleRequest(t *testing.T) {
 	req.Payload = data
 
 	server := &Server{}
-	server.RegisterName("Arith", new(Arith))
+	server.RegisterName("Arith", new(Arith), "")
 	resp, err := server.handleRequest(context.Background(), req)
 	if err != nil {
 		t.Fatalf("failed to hand request: %v", err)
@@ -64,7 +65,7 @@ func TestHandleRequest(t *testing.T) {
 
 	reply := &Reply{}
 
-	codec := share.codecs[resp.SerializeType()]
+	codec := share.Codecs[resp.SerializeType()]
 	if codec == nil {
 		t.Fatalf("can not find codec %c", codec)
 	}
