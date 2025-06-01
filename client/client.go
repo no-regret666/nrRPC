@@ -18,12 +18,16 @@ import (
 	kcp "github.com/xtaci/kcp-go"
 )
 
+type Breaker interface {
+	Call(func() error, time.Duration) error
+}
+
 var (
 	ErrShutdown         = errors.New("connection is shutdown")
 	ErrUnsupportedCodec = errors.New("unsupported codec")
 )
 
-var CircuitBreaker = circuit.NewRateBreaker(0.95, 100)
+var CircuitBreaker Breaker = circuit.NewRateBreaker(0.95, 100)
 
 const (
 	ReaderBuffsize = 16 * 1024
